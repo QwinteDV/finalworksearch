@@ -188,8 +188,10 @@ class ProductSearchApp {
                     this.stopListeningUI();
                     stream.getTracks().forEach(track => track.stop());
                     
-                    const audioBlob = new Blob(this.audioChunks, { type: mimeType });
-                    const transcript = await this.transcribeAudio(audioBlob);
+            const audioBlob = new Blob(this.audioChunks, { type: mimeType });
+            console.log('Created audio blob:', audioBlob.size, 'bytes, type:', audioBlob.type);
+            
+            const transcript = await this.transcribeAudio(audioBlob);
                     
                     if (transcript && transcript.trim()) {
                         this.showLoading(true);
@@ -225,13 +227,15 @@ class ProductSearchApp {
 
     async transcribeAudio(audioBlob) {
         try {
-            // Call AssemblyAI API via serverless function
-            const formData = new FormData();
-            formData.append('audio', audioBlob, 'recording.webm');
-
+            console.log('Audio blob:', audioBlob.size, 'bytes, type:', audioBlob.type);
+            
+            // Send audio blob directly with proper content type
             const response = await fetch('/api/transcribe', {
                 method: 'POST',
-                body: formData
+                headers: {
+                    'Content-Type': audioBlob.type || 'audio/webm'
+                },
+                body: audioBlob
             });
 
             if (!response.ok) {

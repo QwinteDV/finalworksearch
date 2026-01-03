@@ -39,14 +39,21 @@ module.exports = async function handler(req, res) {
             return res.status(400).json({ error: 'No audio data provided' });
         }
 
+        // Log first few bytes to debug audio format
+        const audioSample = audioBuffer.slice(0, 16);
         console.log('Audio received, size:', audioBuffer.length, 'bytes');
+        console.log('Audio header:', Array.from(audioSample).map(b => b.toString(16).padStart(2, '0')).join(' '));
+
+        // Get content type from request
+        const contentType = req.headers['content-type'] || 'audio/webm';
+        console.log('Content type:', contentType);
 
         // Upload audio to AssemblyAI
         const uploadResponse = await fetch('https://api.assemblyai.com/v2/upload', {
             method: 'POST',
             headers: {
                 'Authorization': assemblyApiKey,
-                'Content-Type': 'audio/webm'
+                'Content-Type': contentType
             },
             body: audioBuffer
         });
