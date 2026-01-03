@@ -113,17 +113,29 @@ class ProductSearchApp {
 
     async transcribeAudio(audioBlob) {
         try {
+            const apiKey = API_CONFIG.ASSEMBLYAI_API_KEY;
+            
+            if (!apiKey || apiKey === 'your_assemblyai_api_key_here') {
+                throw new Error('AssemblyAI API key not configured');
+            }
+
             const formData = new FormData();
-            formData.append('audio', audioBlob);
+            formData.append('audio', audioBlob, 'audio.webm');
             formData.append('language_code', 'nl');
 
             const response = await fetch('https://api.assemblyai.com/v2/transcript', {
                 method: 'POST',
                 headers: {
-                    'Authorization': API_CONFIG.ASSEMBLYAI_API_KEY
+                    'Authorization': apiKey
                 },
                 body: formData
             });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('AssemblyAI API Error:', response.status, errorText);
+                throw new Error(`AssemblyAI API error: ${response.status}`);
+            }
 
             const result = await response.json();
             return result.text || '';
