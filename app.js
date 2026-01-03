@@ -113,97 +113,28 @@ class ProductSearchApp {
 
     async transcribeAudio(audioBlob) {
         try {
-            const apiKey = API_CONFIG.ASSEMBLYAI_API_KEY;
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'audio.webm');
+
+            console.log('Sending audio to server proxy...');
+            const response = await fetch('/api/transcribe', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('Server transcription error:', response.status, errorText);
+                throw new Error(`Server transcription failed: ${response.status}`);
+            }
+
+            const result = await response.json();
+            console.log('Transcription result:', result);
             
-            if (!apiKey || apiKey === 'your_assemblyai_api_key_here') {
-                console.error('AssemblyAI API key not configured');
-                alert('AssemblyAI API key not configured. Please check config.js');
-                return '';
-            }
-
-            // Upload audio file first
-            const uploadFormData = new FormData();
-            uploadFormData.append('audio', audioBlob, 'audio.webm');
-
-            console.log('Uploading audio to AssemblyAI...');
-            const uploadResponse = await fetch('https://api.assemblyai.com/v2/upload', {
-                method: 'POST',
-                headers: {
-                    'Authorization': apiKey
-                },
-                body: uploadFormData
-            });
-
-            if (!uploadResponse.ok) {
-                const errorText = await uploadResponse.text();
-                console.error('Upload Error:', uploadResponse.status, errorText);
-                throw new Error(`Upload failed: ${uploadResponse.status}`);
-            }
-
-            const uploadResult = await uploadResponse.json();
-            console.log('Upload successful:', uploadResult);
-
-            // Start transcription
-            console.log('Starting transcription...');
-            const transcriptResponse = await fetch('https://api.assemblyai.com/v2/transcript', {
-                method: 'POST',
-                headers: {
-                    'Authorization': apiKey,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    audio_url: uploadResult.upload_url,
-                    language_code: 'nl'
-                })
-            });
-
-            if (!transcriptResponse.ok) {
-                const errorText = await transcriptResponse.text();
-                console.error('Transcription Error:', transcriptResponse.status, errorText);
-                throw new Error(`Transcription failed: ${transcriptResponse.status}`);
-            }
-
-            const transcriptResult = await transcriptResponse.json();
-            console.log('Transcription started:', transcriptResult);
-
-            // Wait for transcription to complete
-            let transcript = null;
-            let attempts = 0;
-            const maxAttempts = 30;
-
-            while (attempts < maxAttempts) {
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                
-                const statusResponse = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptResult.id}`, {
-                    headers: {
-                        'Authorization': apiKey
-                    }
-                });
-
-                if (statusResponse.ok) {
-                    const statusResult = await statusResponse.json();
-                    console.log('Transcription status:', statusResult.status);
-                    
-                    if (statusResult.status === 'completed') {
-                        transcript = statusResult.text;
-                        break;
-                    } else if (statusResult.status === 'error') {
-                        throw new Error('Transcription failed');
-                    }
-                }
-                
-                attempts++;
-            }
-
-            if (!transcript) {
-                throw new Error('Transcription timeout');
-            }
-
-            console.log('Transcription result:', transcript);
-            return transcript;
+            return result.text || '';
         } catch (error) {
             console.error('Error transcribing audio:', error);
-            alert('Voice transcription failed. Please check your API key and try again.');
+            alert('Voice transcription failed. Please try again.');
             return '';
         }
     }
