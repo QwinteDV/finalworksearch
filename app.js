@@ -194,10 +194,8 @@ class ProductSearchApp {
             const transcript = await this.transcribeAudio(audioBlob);
                     
                     if (transcript && transcript.trim()) {
-                        this.showLoading(true);
-                        const enhancedQuery = await this.enhanceSearchQuery(transcript);
-                        this.searchInput.value = enhancedQuery;
-                        this.handleSearch(enhancedQuery);
+                        this.searchInput.value = transcript;
+                        this.handleSearch(transcript);
                     } else {
                         alert('Geen spraak gedetecteerd. Probeer het opnieuw.');
                     }
@@ -229,13 +227,13 @@ class ProductSearchApp {
         try {
             console.log('Audio blob:', audioBlob.size, 'bytes, type:', audioBlob.type);
             
-            // Send audio blob directly with proper content type
+            // Send as FormData to ensure proper file handling
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'recording.webm');
+
             const response = await fetch('/api/transcribe', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': audioBlob.type || 'audio/webm'
-                },
-                body: audioBlob
+                body: formData
             });
 
             if (!response.ok) {
@@ -248,30 +246,6 @@ class ProductSearchApp {
         } catch (error) {
             console.error('Error transcribing audio:', error);
             throw error;
-        }
-    }
-
-    async enhanceSearchQuery(query) {
-        try {
-            // Call Groq API via serverless function
-            const response = await fetch('/api/enhance', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ query })
-            });
-
-            if (!response.ok) {
-                console.error('Enhancement failed, using original query');
-                return query;
-            }
-
-            const result = await response.json();
-            return result.enhancedQuery || query;
-        } catch (error) {
-            console.error('Error enhancing search query:', error);
-            return query;
         }
     }
 

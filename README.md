@@ -5,7 +5,6 @@ Een moderne web applicatie met AI-powered voice search en product zoeken.
 ## Features
 - 🔍 Real-time tekst search in producten
 - 🎤 Voice search met AssemblyAI transcriptie
-- 🤖 AI-powered zoekverbetering met Groq
 - 📱 Responsive design met Tailwind CSS
 - 🛍️ 12 test producten in verschillende categorieën
 
@@ -15,8 +14,7 @@ Een moderne web applicatie met AI-powered voice search en product zoeken.
 ├── app.js             # Main JavaScript functionaliteit
 ├── styles.css         # Custom styles
 ├── api/
-│   ├── transcribe.js  # AssemblyAI transcriptie API
-│   └── enhance.js    # Groq AI zoekverbetering API
+│   └── transcribe.js  # AssemblyAI transcriptie API
 ├── package.json       # Dependencies
 └── README.md          # Deze file
 ```
@@ -27,19 +25,16 @@ Een moderne web applicatie met AI-powered voice search en product zoeken.
 2. **Import in Vercel**
 3. **Environment Variables toevoegen:**
    ```
-   GROQ_API_KEY=jouw_groq_api_key
    ASSEMBLYAI_API_KEY=jouw_assemblyai_api_key
    ```
 
 ## API Keys
-- **Groq API Key**: Maak aan op [groq.com](https://groq.com)
 - **AssemblyAI API Key**: Maak aan op [assemblyai.com](https://assemblyai.com)
 
 ## Gebruik
 1. Open de deployed site
 2. Typ in de search bar voor direct zoeken
 3. Klik op de microfoon voor voice search (3 seconden opname)
-4. De AI verbetert automatisch je zoekopdracht
 
 ## Browser Support
 - Chrome/Edge (beste voice support)

@@ -16,51 +16,87 @@ module.exports = async function handler(req, res) {
         const assemblyApiKey = process.env.ASSEMBLYAI_API_KEY;
         
         if (!assemblyApiKey) {
-            console.error('AssemblyAI API key not configured');
+            console.error('AssemblyAI API key not configured. Check Vercel environment variables.');
             return res.status(500).json({ error: 'AssemblyAI API key not configured' });
         }
 
-        // Convert request to buffer
-        const buffers = [];
-        
-        req.on('data', (chunk) => {
-            buffers.push(chunk);
-        });
-        
-        await new Promise((resolve, reject) => {
-            req.on('end', resolve);
-            req.on('error', reject);
-        });
-        
-        const audioBuffer = Buffer.concat(buffers);
+        console.log('AssemblyAI API key found, processing audio...');
+
+        // Handle both raw audio and FormData
+        let audioBuffer;
+        let contentType = 'audio/webm';
+
+        // Check if it's FormData
+        const contentTypeHeader = req.headers['content-type'];
+        if (contentTypeHeader && contentTypeHeader.includes('multipart/form-data')) {
+            // Parse FormData
+            const chunks = [];
+            let boundary = '--' + contentTypeHeader.split('boundary=')[1];
+            let data = Buffer.alloc(0);
+            
+            req.on('data', chunk => data = Buffer.concat([data, chunk]));
+            
+            await new Promise((resolve, reject) => {
+                req.on('end', resolve);
+                req.on('error', reject);
+            });
+
+            // Extract audio from FormData
+            const parts = data.toString().split(boundary);
+            for (const part of parts) {
+                if (part.includes('Content-Disposition: form-data') && part.includes('audio')) {
+                    const headerEnd = part.indexOf('\r\n\r\n');
+                    const audioData = part.substring(headerEnd + 4);
+                    audioBuffer = Buffer.from(audioData, 'binary');
+                    break;
+                }
+            }
+        } else {
+            // Raw audio buffer
+            const buffers = [];
+            req.on('data', (chunk) => buffers.push(chunk));
+            
+            await new Promise((resolve, reject) => {
+                req.on('end', resolve);
+                req.on('error', reject);
+            });
+            
+            audioBuffer = Buffer.concat(buffers);
+            contentType = req.headers['content-type'] || 'audio/webm';
+        }
 
         if (!audioBuffer || audioBuffer.length === 0) {
             console.error('No audio data provided');
             return res.status(400).json({ error: 'No audio data provided' });
         }
 
-        // Log first few bytes to debug audio format
-        const audioSample = audioBuffer.slice(0, 16);
         console.log('Audio received, size:', audioBuffer.length, 'bytes');
-        console.log('Audio header:', Array.from(audioSample).map(b => b.toString(16).padStart(2, '0')).join(' '));
-
-        // Get content type from request
-        const contentType = req.headers['content-type'] || 'audio/webm';
         console.log('Content type:', contentType);
 
+        // Create a proper WebM file if needed
+        let finalBuffer = audioBuffer;
+        if (!audioBuffer.toString('ascii', 0, 4).includes('EBML')) {
+            // Add WebM header if missing
+            const webmHeader = Buffer.from([0x1A, 0x45, 0xDF, 0xA3]);
+            finalBuffer = Buffer.concat([webmHeader, audioBuffer]);
+            console.log('Added WebM header to audio');
+        }
+
         // Upload audio to AssemblyAI
+        console.log('Uploading to AssemblyAI...');
         const uploadResponse = await fetch('https://api.assemblyai.com/v2/upload', {
             method: 'POST',
             headers: {
                 'Authorization': assemblyApiKey,
                 'Content-Type': contentType
             },
-            body: audioBuffer
+            body: finalBuffer
         });
 
         if (!uploadResponse.ok) {
-            console.error('Upload failed:', uploadResponse.status);
-            return res.status(500).json({ error: `Upload failed: ${uploadResponse.status}` });
+            const errorText = await uploadResponse.text();
+            console.error('Upload failed:', uploadResponse.status, errorText);
+            return res.status(500).json({ error: `Upload failed: ${uploadResponse.status}`, details: errorText });
         }
 
         const uploadData = await uploadResponse.json();
@@ -82,8 +118,9 @@ module.exports = async function handler(req, res) {
         });
 
         if (!transcriptResponse.ok) {
-            console.error('Transcription failed:', transcriptResponse.status);
-            return res.status(500).json({ error: `Transcription failed: ${transcriptResponse.status}` });
+            const errorText = await transcriptResponse.text();
+            console.error('Transcription failed:', transcriptResponse.status, errorText);
+            return res.status(500).json({ error: `Transcription failed: ${transcriptResponse.status}`, details: errorText });
         }
 
         const transcriptData = await transcriptResponse.json();
@@ -109,6 +146,7 @@ module.exports = async function handler(req, res) {
             }
 
             transcriptResult = await pollResponse.json();
+            console.log(`Poll ${attempts + 1}/${maxAttempts}:`, transcriptResult.status);
 
             if (transcriptResult.status === 'completed') {
                 console.log('Transcription completed:', transcriptResult.text);
@@ -122,7 +160,7 @@ module.exports = async function handler(req, res) {
             attempts++;
         }
 
-        if (transcriptResult.status !== 'completed') {
+        if (!transcriptResult || transcriptResult.status !== 'completed') {
             console.error('Transcription timeout');
             return res.status(500).json({ error: 'Transcription timeout' });
         }
