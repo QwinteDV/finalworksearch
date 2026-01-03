@@ -1,41 +1,47 @@
 # Product Zoek Machine
 
-Een moderne product zoekmachine met AI-powered voice search en tekst zoeken.
+Een moderne web applicatie met AI-powered voice search en product zoeken.
 
 ## Features
-- 🔍 Real-time tekst search
-- 🎤 Voice search met AssemblyAI
+- 🔍 Real-time tekst search in producten
+- 🎤 Voice search met AssemblyAI transcriptie
 - 🤖 AI-powered zoekverbetering met Groq
-- 📱 Responsive design
+- 📱 Responsive design met Tailwind CSS
 - 🛍️ 12 test producten in verschillende categorieën
 
-## Deployment op Vercel
+## Structuur
+```
+├── index.html          # Hoofdpagina
+├── app.js             # Main JavaScript functionaliteit
+├── styles.css         # Custom styles
+├── api/
+│   ├── transcribe.js  # AssemblyAI transcriptie API
+│   └── enhance.js    # Groq AI zoekverbetering API
+├── package.json       # Dependencies
+└── README.md          # Deze file
+```
+
+## Vercel Deployment
 
 1. **Push naar GitHub**
-2. **Vercel Environment Variables:**
+2. **Import in Vercel**
+3. **Environment Variables toevoegen:**
    ```
-   GROQ_API_KEY=jouw_groq_key
-   ASSEMBLY_API_KEY=jouw_assemblyai_key
+   GROQ_API_KEY=jouw_groq_api_key
+   ASSEMBLYAI_API_KEY=jouw_assemblyai_api_key
    ```
-3. **Deploy**
 
-## Bestanden Structuur
-```
-├── app/
-│   ├── page.js                 # Hoofdpagina met environment variables
-│   ├── api/
-│   │   ├── transcribe/route.js # AssemblyAI proxy
-│   │   └── enhance/route.js    # Groq proxy
-│   └── globals.css
-├── lib/
-│   └── products.js             # Product data
-├── app.js                      # Main JavaScript logic
-├── config.js                   # Client-side config
-├── styles.css                  # Custom styles
-└── next.config.js              # Next.js config
-```
+## API Keys
+- **Groq API Key**: Maak aan op [groq.com](https://groq.com)
+- **AssemblyAI API Key**: Maak aan op [assemblyai.com](https://assemblyai.com)
 
-## Security
-- API keys zijn alleen server-side beschikbaar
-- Client-side code roept secure API endpoints aan
-- Geen API keys in browser zichtbaar
+## Gebruik
+1. Open de deployed site
+2. Typ in de search bar voor direct zoeken
+3. Klik op de microfoon voor voice search (3 seconden opname)
+4. De AI verbetert automatisch je zoekopdracht
+
+## Browser Support
+- Chrome/Edge (beste voice support)
+- Firefox/Safari (basic functionaliteit)
+- Microfoon toestemming vereist voor voice search

@@ -1,15 +1,114 @@
-// Main application
+// Product data
+const products = [
+    {
+        id: 1,
+        name: "Apple iPhone 15 Pro",
+        description: "De nieuwste iPhone met titanium behuizing en A17 Pro chip",
+        price: 1199,
+        category: "Smartphones",
+        inStock: true,
+    },
+    {
+        id: 2,
+        name: "Samsung Galaxy S24 Ultra",
+        description: "Premium Android telefoon met S Pen en geweldige camera",
+        price: 1299,
+        category: "Smartphones",
+        inStock: true,
+    },
+    {
+        id: 3,
+        name: "MacBook Pro 14-inch",
+        description: "Krachtige laptop met M3 Pro chip voor professioneel gebruik",
+        price: 1999,
+        category: "Laptops",
+        inStock: true,
+    },
+    {
+        id: 4,
+        name: "Dell XPS 13",
+        description: "Dunne en lichte Windows laptop met InfinityEdge display",
+        price: 1299,
+        category: "Laptops",
+        inStock: false,
+    },
+    {
+        id: 5,
+        name: "Sony WH-1000XM5",
+        description: "Premium noise cancelling hoofdtelefoon met uitstekende geluidskwaliteit",
+        price: 399,
+        category: "Audio",
+        inStock: true,
+    },
+    {
+        id: 6,
+        name: "AirPods Pro 2",
+        description: "Draadloze oordopjes met actieve noise cancelling",
+        price: 249,
+        category: "Audio",
+        inStock: true,
+    },
+    {
+        id: 7,
+        name: "iPad Air",
+        description: "Veelzijdige tablet met M1 chip voor werk en entertainment",
+        price: 599,
+        category: "Tablets",
+        inStock: true,
+    },
+    {
+        id: 8,
+        name: "Microsoft Surface Pro 9",
+        description: "2-in-1 tablet met laptop prestaties en Windows 11",
+        price: 999,
+        category: "Tablets",
+        inStock: true,
+    },
+    {
+        id: 9,
+        name: "Nintendo Switch OLED",
+        description: "Hybrid gameconsole met OLED scherm voor thuis en onderweg",
+        price: 349,
+        category: "Gaming",
+        inStock: true,
+    },
+    {
+        id: 10,
+        name: "PlayStation 5",
+        description: "Next-gen gameconsole met 4K gaming en snelle SSD",
+        price: 499,
+        category: "Gaming",
+        inStock: false,
+    },
+    {
+        id: 11,
+        name: "Apple Watch Series 9",
+        description: "Smartwatch met gezondheidsfuncties en fitness tracking",
+        price: 429,
+        category: "Wearables",
+        inStock: true,
+    },
+    {
+        id: 12,
+        name: "Samsung Galaxy Watch 6",
+        description: "Android smartwatch met uitgebreide gezondheidsmonitoring",
+        price: 349,
+        category: "Wearables",
+        inStock: true,
+    },
+];
+
+// Main Application Class
 class ProductSearchApp {
     constructor() {
-        // Use embedded products instead of separate file
-        this.products = window.PRODUCTS || [];
-        this.filteredProducts = [];
+        this.products = products;
+        this.filteredProducts = products;
         this.isListening = false;
         this.mediaRecorder = null;
         this.audioChunks = [];
         
         this.initializeElements();
-        this.loadProducts();
+        this.renderProducts();
         this.attachEventListeners();
     }
 
@@ -23,12 +122,6 @@ class ProductSearchApp {
         this.resultCount = document.getElementById('resultCount');
         this.currentQuery = document.getElementById('currentQuery');
         this.listeningIndicator = document.getElementById('listeningIndicator');
-    }
-
-    loadProducts() {
-        // Products are already loaded from window.PRODUCTS
-        this.filteredProducts = this.products;
-        this.renderProducts();
     }
 
     attachEventListeners() {
@@ -66,13 +159,13 @@ class ProductSearchApp {
             this.startListeningUI();
 
             // Check browser support
-            console.log('MediaRecorder support:', !!window.MediaRecorder);
-            console.log('Supported MIME types:', MediaRecorder.isTypeSupported('audio/webm;codecs=opus'));
-            
+            if (!window.MediaRecorder) {
+                throw new Error('Je browser ondersteunt geen audio recording. Gebruik Chrome of Edge.');
+            }
+
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            console.log('Audio stream obtained:', stream.getAudioTracks().length, 'audio tracks');
             
-            // Try different MIME types
+            // Find supported MIME type
             let mimeType = 'audio/webm;codecs=opus';
             if (!MediaRecorder.isTypeSupported(mimeType)) {
                 mimeType = 'audio/webm';
@@ -81,13 +174,10 @@ class ProductSearchApp {
                 }
             }
             
-            console.log('Using MIME type:', mimeType);
-            
             this.mediaRecorder = new MediaRecorder(stream, { mimeType });
             this.audioChunks = [];
 
             this.mediaRecorder.ondataavailable = (event) => {
-                console.log('Audio chunk received:', event.data.size, 'bytes');
                 if (event.data.size > 0) {
                     this.audioChunks.push(event.data);
                 }
@@ -98,32 +188,20 @@ class ProductSearchApp {
                     this.stopListeningUI();
                     stream.getTracks().forEach(track => track.stop());
                     
-                    console.log('Total chunks:', this.audioChunks.length);
-                    console.log('Total audio size:', this.audioChunks.reduce((acc, chunk) => acc + chunk.size, 0), 'bytes');
-                    
                     const audioBlob = new Blob(this.audioChunks, { type: mimeType });
-                    console.log('Audio blob created:', audioBlob.size, 'bytes, type:', audioBlob.type);
-                    
-                    // Test the audio blob before sending
-                    const audioUrl = URL.createObjectURL(audioBlob);
-                    console.log('Audio test URL:', audioUrl);
-                    
                     const transcript = await this.transcribeAudio(audioBlob);
-                    console.log('Final transcript:', transcript);
                     
                     if (transcript && transcript.trim()) {
                         this.showLoading(true);
                         const enhancedQuery = await this.enhanceSearchQuery(transcript);
-                        console.log('Enhanced query:', enhancedQuery);
                         this.searchInput.value = enhancedQuery;
                         this.handleSearch(enhancedQuery);
                     } else {
-                        console.warn('Empty transcript received');
                         alert('Geen spraak gedetecteerd. Probeer het opnieuw.');
                     }
                 } catch (error) {
                     console.error('Error processing voice search:', error);
-                    this.stopListeningUI();
+                    alert('Voice search mislukt. Probeer het opnieuw.');
                 } finally {
                     this.isListening = false;
                     this.showLoading(false);
@@ -131,11 +209,8 @@ class ProductSearchApp {
             };
 
             this.mediaRecorder.start();
-            console.log('Recording started for 3 seconds...');
-            
             setTimeout(() => {
                 if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
-                    console.log('Stopping recording...');
                     this.mediaRecorder.stop();
                 }
             }, 3000);
@@ -144,60 +219,52 @@ class ProductSearchApp {
             console.error('Error starting voice recording:', error);
             this.isListening = false;
             this.stopListeningUI();
-            alert('Microfoon toegang geweigerd. Sta microfoon toe en probeer opnieuw.');
+            alert(error.message || 'Microfoon toegang geweigerd. Sta microfoon toe en probeer opnieuw.');
         }
     }
 
     async transcribeAudio(audioBlob) {
         try {
-            console.log('Sending audio to server proxy...');
+            // Call AssemblyAI API via serverless function
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'recording.webm');
 
-            // Use the API route
             const response = await fetch('/api/transcribe', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'audio/webm;codecs=opus'
-                },
-                body: audioBlob
+                body: formData
             });
 
-            const responseText = await response.text();
-            
             if (!response.ok) {
-                console.error('API Response:', response.status, responseText);
-                throw new Error(`Transcription failed: ${responseText}`);
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Transcription failed');
             }
 
-            const data = JSON.parse(responseText);
-            console.log('Transcription result:', data);
-            
-            return data.text || '';
+            const result = await response.json();
+            return result.text || '';
         } catch (error) {
             console.error('Error transcribing audio:', error);
-            alert('Voice transcription failed. Please try again.');
-            return '';
+            throw error;
         }
     }
 
     async enhanceSearchQuery(query) {
         try {
-            const response = await fetch('/api/chat', {
+            // Call Groq API via serverless function
+            const response = await fetch('/api/enhance', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ message: query })
+                body: JSON.stringify({ query })
             });
 
             if (!response.ok) {
-                console.error('Enhancement server error:', response.status);
+                console.error('Enhancement failed, using original query');
                 return query;
             }
 
             const result = await response.json();
-            console.log('Enhancement result:', result);
-            
-            return result.response || query;
+            return result.enhancedQuery || query;
         } catch (error) {
             console.error('Error enhancing search query:', error);
             return query;
