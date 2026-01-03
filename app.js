@@ -141,31 +141,23 @@ class ProductSearchApp {
 
     async enhanceSearchQuery(query) {
         try {
-            const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            const response = await fetch('/api/enhance', {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${API_CONFIG.GROQ_API_KEY}`,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({
-                    messages: [
-                        {
-                            role: 'system',
-                            content: 'Je bent een zoekassistent voor een webshop met elektronica. Help de gebruiker door hun zoekopdracht te verbeteren en relevante zoektermen toe te voegen. Geef alleen de verbeterde zoekterm terug, geen extra uitleg.'
-                        },
-                        {
-                            role: 'user',
-                            content: `Verbeter deze zoekopdracht voor een webshop: "${query}"`
-                        }
-                    ],
-                    model: 'llama3-8b-8192',
-                    max_tokens: 50,
-                    temperature: 0.1
-                })
+                body: JSON.stringify({ query })
             });
 
+            if (!response.ok) {
+                console.error('Enhancement server error:', response.status);
+                return query;
+            }
+
             const result = await response.json();
-            return result.choices[0]?.message?.content?.trim() || query;
+            console.log('Enhancement result:', result);
+            
+            return result.enhancedQuery || query;
         } catch (error) {
             console.error('Error enhancing search query:', error);
             return query;

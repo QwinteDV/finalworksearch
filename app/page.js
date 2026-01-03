@@ -1,6 +1,6 @@
-import { products } from '../products.js';
+import './globals.css';
 
-export default function Index() {
+export default function Home() {
   return (
     <>
       <script
@@ -10,6 +10,7 @@ export default function Index() {
               GROQ_API_KEY: "${process.env.GROQ_API_KEY}",
               ASSEMBLYAI_API_KEY: "${process.env.ASSEMBLYAI_API_KEY}"
             };
+            console.log('Vercel environment loaded:', !!window.ENV.GROQ_API_KEY && !!window.ENV.ASSEMBLYAI_API_KEY);
           `,
         }}
       />
@@ -93,7 +94,7 @@ export default function Index() {
             </main>
 
             <script src="/config.js"></script>
-            <script src="/products.js"></script>
+            <script src="/lib/products.js"></script>
             <script src="/app.js"></script>
         </body>
         </html>
