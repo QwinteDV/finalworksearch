@@ -114,18 +114,29 @@ class ProductSearchApp {
     async transcribeAudio(audioBlob) {
         try {
             console.log('Sending audio to server proxy...');
+            
+            // Create proper FormData for Next.js API route
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'recording.webm');
+
             const response = await fetch('/api/transcribe', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': audioBlob.type || 'audio/webm'
-                },
-                body: audioBlob
+                body: formData
             });
 
             if (!response.ok) {
-                const errorData = await response.json();
-                console.error('Server transcription error:', response.status, errorData);
-                throw new Error(`Server transcription failed: ${response.status} - ${errorData.error}`);
+                const errorText = await response.text();
+                console.error('Server transcription error:', response.status, errorText);
+                
+                // Try to parse as JSON if possible
+                let errorData;
+                try {
+                    errorData = JSON.parse(errorText);
+                } catch {
+                    errorData = { error: errorText };
+                }
+                
+                throw new Error(`Server transcription failed: ${response.status} - ${errorData.error || errorText}`);
             }
 
             const result = await response.json();

@@ -1,8 +1,5 @@
 export async function POST(request) {
-  // Convert Next.js request to Node.js format
-  const req = await request;
-  
-  if (req.method !== 'POST') {
+  if (request.method !== 'POST') {
     return Response.json({ error: 'Method not allowed' }, { status: 405 });
   }
 
@@ -13,16 +10,18 @@ export async function POST(request) {
       return Response.json({ error: 'AssemblyAI API key not configured' }, { status: 500 });
     }
 
-    // Get content type from request headers
-    const contentType = req.headers.get('content-type');
+    // Parse form data to get the audio file
+    const formData = await request.formData();
+    const audioFile = formData.get('audio');
     
-    // Convert request to buffer
-    const audioBuffer = await req.arrayBuffer();
-    const buffer = Buffer.from(audioBuffer);
-
-    if (!buffer || buffer.length === 0) {
+    if (!audioFile) {
       return Response.json({ error: 'No audio data provided' }, { status: 400 });
     }
+
+    // Convert file to buffer
+    const audioBuffer = await audioFile.arrayBuffer();
+    const buffer = Buffer.from(audioBuffer);
+    const contentType = audioFile.type || 'audio/webm';
 
     // Upload audio to AssemblyAI with correct content type
     const uploadResponse = await fetch('https://api.assemblyai.com/v2/upload', {
