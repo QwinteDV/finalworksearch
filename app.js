@@ -113,19 +113,19 @@ class ProductSearchApp {
 
     async transcribeAudio(audioBlob) {
         try {
-            const formData = new FormData();
-            formData.append('audio', audioBlob, 'audio.webm');
-
             console.log('Sending audio to server proxy...');
             const response = await fetch('/api/transcribe', {
                 method: 'POST',
-                body: formData
+                headers: {
+                    'Content-Type': audioBlob.type || 'audio/webm'
+                },
+                body: audioBlob
             });
 
             if (!response.ok) {
-                const errorText = await response.text();
-                console.error('Server transcription error:', response.status, errorText);
-                throw new Error(`Server transcription failed: ${response.status}`);
+                const errorData = await response.json();
+                console.error('Server transcription error:', response.status, errorData);
+                throw new Error(`Server transcription failed: ${response.status} - ${errorData.error}`);
             }
 
             const result = await response.json();
@@ -146,18 +146,19 @@ class ProductSearchApp {
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ query })
+                body: JSON.stringify({ message: query })
             });
 
             if (!response.ok) {
-                console.error('Enhancement server error:', response.status);
+                const errorData = await response.json();
+                console.error('Enhancement server error:', response.status, errorData);
                 return query;
             }
 
             const result = await response.json();
             console.log('Enhancement result:', result);
             
-            return result.enhancedQuery || query;
+            return result.response || query;
         } catch (error) {
             console.error('Error enhancing search query:', error);
             return query;

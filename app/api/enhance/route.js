@@ -1,19 +1,27 @@
-// Server-side API proxy for Groq
 export async function POST(request) {
   try {
-    const { query } = await request.json();
-
-    if (!query) {
-      return new Response('No query provided', { status: 400 });
+    const { message } = await request.json();
+    
+    if (!message) {
+      return Response.json({ error: 'No message provided' }, { status: 400 });
     }
+
+    const groqApiKey = process.env.GROQ_API_KEY;
+    
+    if (!groqApiKey) {
+      return Response.json({ error: 'Groq API key not configured' }, { status: 500 });
+    }
+
+    const model = process.env.GROQ_MODEL || 'llama3-8b-8192';
 
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+        'Authorization': `Bearer ${groqApiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        model: model,
         messages: [
           {
             role: 'system',
@@ -21,33 +29,32 @@ export async function POST(request) {
           },
           {
             role: 'user',
-            content: `Verbeter deze zoekopdracht voor een webshop: "${query}"`
+            content: `Verbeter deze zoekopdracht voor een webshop: "${message}"`
           }
         ],
-        model: 'llama3-8b-8192',
         max_tokens: 50,
-        temperature: 0.1,
-      }),
+        temperature: 0.1
+      })
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Groq API error:', errorText);
-      return new Response('Groq API failed', { status: response.status });
+      const errorData = await response.text();
+      throw new Error(`Groq API error: ${response.status} - ${errorData}`);
     }
 
-    const result = await response.json();
-    const enhancedQuery = result.choices[0]?.message?.content?.trim() || query;
+    const data = await response.json();
+    const aiResponse = data.choices[0].message.content.trim();
 
-    return new Response(JSON.stringify({ 
-      originalQuery: query,
-      enhancedQuery: enhancedQuery 
-    }), {
-      headers: { 'Content-Type': 'application/json' },
+    return Response.json({ 
+      response: aiResponse,
+      originalQuery: message
     });
 
   } catch (error) {
     console.error('Enhancement error:', error);
-    return new Response('Internal server error', { status: 500 });
+    return Response.json({ 
+      error: error.message || 'AI response failed',
+      details: error.toString()
+    }, { status: 500 });
   }
 }
