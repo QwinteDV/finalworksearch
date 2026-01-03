@@ -191,8 +191,13 @@ class ProductSearchApp {
             const transcript = await this.transcribeAudio(wavBlob);
                     
                     if (transcript && transcript.trim()) {
-                        this.searchInput.value = transcript;
-                        this.handleSearch(transcript);
+                        // Clean up transcript - remove unwanted punctuation and spacing
+                        const cleanedTranscript = this.cleanTranscript(transcript);
+                        console.log('Original transcript:', transcript);
+                        console.log('Cleaned transcript:', cleanedTranscript);
+                        
+                        this.searchInput.value = cleanedTranscript;
+                        this.handleSearch(cleanedTranscript);
                     } else {
                         alert('Geen spraak gedetecteerd. Probeer het opnieuw.');
                     }
@@ -325,6 +330,20 @@ class ProductSearchApp {
 
     hideSearchInfo() {
         this.searchInfo.classList.add('hidden');
+    }
+
+    cleanTranscript(transcript) {
+        return transcript
+            // Remove unwanted punctuation at end of sentences
+            .replace(/[.!?]+$/, '')
+            // Remove common AI service names that might be accidentally transcribed
+            .replace(/\b(assemblyai|assembly ai|transcript|google|siri|alexa)\b/gi, '')
+            // Remove connecting words that don't help search
+            .replace(/\b(zoek|vind|geef|toon)\b/gi, '')
+            // Clean up extra whitespace
+            .replace(/\s+/g, ' ')
+            // Remove leading/trailing whitespace
+            .trim();
     }
 
     async convertToWav(audioBlob) {
