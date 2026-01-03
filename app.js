@@ -1,7 +1,8 @@
 // Main application
 class ProductSearchApp {
     constructor() {
-        this.products = [];
+        // Use embedded products instead of separate file
+        this.products = window.PRODUCTS || [];
         this.filteredProducts = [];
         this.isListening = false;
         this.mediaRecorder = null;
@@ -25,7 +26,7 @@ class ProductSearchApp {
     }
 
     loadProducts() {
-        this.products = products; // From products.js
+        // Products are already loaded from window.PRODUCTS
         this.filteredProducts = this.products;
         this.renderProducts();
     }
@@ -64,11 +65,29 @@ class ProductSearchApp {
             this.isListening = true;
             this.startListeningUI();
 
+            // Check browser support
+            console.log('MediaRecorder support:', !!window.MediaRecorder);
+            console.log('Supported MIME types:', MediaRecorder.isTypeSupported('audio/webm;codecs=opus'));
+            
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            this.mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+            console.log('Audio stream obtained:', stream.getAudioTracks().length, 'audio tracks');
+            
+            // Try different MIME types
+            let mimeType = 'audio/webm;codecs=opus';
+            if (!MediaRecorder.isTypeSupported(mimeType)) {
+                mimeType = 'audio/webm';
+                if (!MediaRecorder.isTypeSupported(mimeType)) {
+                    mimeType = 'audio/mp4';
+                }
+            }
+            
+            console.log('Using MIME type:', mimeType);
+            
+            this.mediaRecorder = new MediaRecorder(stream, { mimeType });
             this.audioChunks = [];
 
             this.mediaRecorder.ondataavailable = (event) => {
+                console.log('Audio chunk received:', event.data.size, 'bytes');
                 if (event.data.size > 0) {
                     this.audioChunks.push(event.data);
                 }
@@ -79,14 +98,28 @@ class ProductSearchApp {
                     this.stopListeningUI();
                     stream.getTracks().forEach(track => track.stop());
                     
-                    const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm;codecs=opus' });
-                    const transcript = await this.transcribeAudio(audioBlob);
+                    console.log('Total chunks:', this.audioChunks.length);
+                    console.log('Total audio size:', this.audioChunks.reduce((acc, chunk) => acc + chunk.size, 0), 'bytes');
                     
-                    if (transcript) {
+                    const audioBlob = new Blob(this.audioChunks, { type: mimeType });
+                    console.log('Audio blob created:', audioBlob.size, 'bytes, type:', audioBlob.type);
+                    
+                    // Test the audio blob before sending
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    console.log('Audio test URL:', audioUrl);
+                    
+                    const transcript = await this.transcribeAudio(audioBlob);
+                    console.log('Final transcript:', transcript);
+                    
+                    if (transcript && transcript.trim()) {
                         this.showLoading(true);
                         const enhancedQuery = await this.enhanceSearchQuery(transcript);
+                        console.log('Enhanced query:', enhancedQuery);
                         this.searchInput.value = enhancedQuery;
                         this.handleSearch(enhancedQuery);
+                    } else {
+                        console.warn('Empty transcript received');
+                        alert('Geen spraak gedetecteerd. Probeer het opnieuw.');
                     }
                 } catch (error) {
                     console.error('Error processing voice search:', error);
@@ -98,8 +131,11 @@ class ProductSearchApp {
             };
 
             this.mediaRecorder.start();
+            console.log('Recording started for 3 seconds...');
+            
             setTimeout(() => {
                 if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
+                    console.log('Stopping recording...');
                     this.mediaRecorder.stop();
                 }
             }, 3000);
@@ -108,6 +144,7 @@ class ProductSearchApp {
             console.error('Error starting voice recording:', error);
             this.isListening = false;
             this.stopListeningUI();
+            alert('Microfoon toegang geweigerd. Sta microfoon toe en probeer opnieuw.');
         }
     }
 
@@ -115,6 +152,7 @@ class ProductSearchApp {
         try {
             console.log('Sending audio to server proxy...');
 
+            // Use the API route
             const response = await fetch('/api/transcribe', {
                 method: 'POST',
                 headers: {

@@ -1,4 +1,196 @@
+import { products } from './lib/products.js';
 import './globals.css';
+
+// API Route handler for transcription
+async function handleTranscribeRequest(request) {
+  try {
+    const assemblyApiKey = process.env.ASSEMBLYAI_API_KEY;
+    
+    if (!assemblyApiKey) {
+      return new Response(JSON.stringify({ error: 'AssemblyAI API key not configured' }), { 
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    const audioArrayBuffer = await request.arrayBuffer();
+    const audioBuffer = Buffer.from(audioArrayBuffer);
+
+    if (!audioBuffer || audioBuffer.length === 0) {
+      return new Response(JSON.stringify({ error: 'No audio data provided' }), { 
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    const uploadResponse = await fetch('https://api.assemblyai.com/v2/upload', {
+      method: 'POST',
+      headers: {
+        'Authorization': assemblyApiKey,
+        'Content-Type': 'audio/webm'
+      },
+      body: audioBuffer
+    });
+
+    if (!uploadResponse.ok) {
+      return new Response(JSON.stringify({ error: `Upload failed: ${uploadResponse.status}` }), { 
+        status: uploadResponse.status,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    const uploadData = await uploadResponse.json();
+    const audioUrl = uploadData.upload_url;
+
+    const transcriptResponse = await fetch('https://api.assemblyai.com/v2/transcript', {
+      method: 'POST',
+      headers: {
+        'Authorization': assemblyApiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        audio_url: audioUrl,
+        language_code: 'nl'
+      })
+    });
+
+    if (!transcriptResponse.ok) {
+      return new Response(JSON.stringify({ error: `Transcription failed: ${transcriptResponse.status}` }), { 
+        status: transcriptResponse.status,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    const transcriptData = await transcriptResponse.json();
+    const transcriptId = transcriptData.id;
+
+    let transcriptResult;
+    let attempts = 0;
+    const maxAttempts = 30;
+
+    while (attempts < maxAttempts) {
+      const pollResponse = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
+        headers: {
+          'Authorization': assemblyApiKey,
+        }
+      });
+
+      if (!pollResponse.ok) {
+        return new Response(JSON.stringify({ error: `Poll failed: ${pollResponse.status}` }), { 
+          status: pollResponse.status,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      transcriptResult = await pollResponse.json();
+
+      if (transcriptResult.status === 'completed') {
+        break;
+      } else if (transcriptResult.status === 'error') {
+        return new Response(JSON.stringify({ error: `Transcription error: ${transcriptResult.error}` }), { 
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      attempts++;
+    }
+
+    if (transcriptResult.status !== 'completed') {
+      return new Response(JSON.stringify({ error: 'Transcription timeout' }), { 
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    return new Response(JSON.stringify({ 
+      text: transcriptResult.text 
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+  } catch (error) {
+    console.error('Transcription error:', error);
+    return new Response(JSON.stringify({ 
+      error: 'Transcription failed',
+      message: error.message
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+// API Route handler for chat/enhancement
+async function handleChatRequest(request) {
+  try {
+    const { message } = await request.json();
+    
+    if (!message) {
+      return new Response(JSON.stringify({ error: 'No message provided' }), { 
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    const groqApiKey = process.env.GROQ_API_KEY;
+    
+    if (!groqApiKey) {
+      return new Response(JSON.stringify({ error: 'Groq API key not configured' }), { 
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${groqApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'llama3-8b-8192',
+        messages: [
+          {
+            role: 'system',
+            content: 'Je bent een zoekassistent voor een webshop met elektronica. Help de gebruiker door hun zoekopdracht te verbeteren en relevante zoektermen toe te voegen. Geef alleen de verbeterde zoekterm terug, geen extra uitleg.'
+          },
+          {
+            role: 'user',
+            content: `Verbeter deze zoekopdracht voor een webshop: "${message}"`
+          }
+        ],
+        max_tokens: 50,
+        temperature: 0.1
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      throw new Error(`Groq API error: ${response.status} - ${errorData}`);
+    }
+
+    const data = await response.json();
+    const aiResponse = data.choices[0].message.content.trim();
+
+    return new Response(JSON.stringify({ 
+      response: aiResponse 
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+  } catch (error) {
+    console.error('Enhancement error:', error);
+    return new Response(JSON.stringify({ 
+      error: error.message || 'AI response failed',
+      details: error.toString()
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
 
 export default function Home() {
   return (
@@ -6,28 +198,54 @@ export default function Home() {
       <script
         dangerouslySetInnerHTML={{
           __html: `
-            // Test API routes
-            fetch('/api/test')
-              .then(res => res.json())
-              .then(data => console.log('API Test:', data))
-              .catch(err => console.error('API Test failed:', err));
-            
-            // Test specific routes
-            fetch('/api/transcribe', { method: 'POST', body: 'test' })
-              .then(res => res.json())
-              .then(data => console.log('Transcribe API:', data))
-              .catch(err => console.error('Transcribe API failed:', err));
-            
-            fetch('/api/chat', { method: 'POST', body: JSON.stringify({message: 'test'}) })
-              .then(res => res.json())
-              .then(data => console.log('Chat API:', data))
-              .catch(err => console.error('Chat API failed:', err));
-            
+            // Environment variables
             window.ENV = {
               GROQ_API_KEY: "${process.env.GROQ_API_KEY}",
               ASSEMBLYAI_API_KEY: "${process.env.ASSEMBLYAI_API_KEY}"
             };
-            console.log('Vercel environment loaded:', !!window.ENV.GROQ_API_KEY && !!window.ENV.ASSEMBLYAI_API_KEY);
+            
+            console.log('Environment loaded:', !!window.ENV.GROQ_API_KEY && !!window.ENV.ASSEMBLYAI_API_KEY);
+            console.log('Groq key length:', window.ENV.GROQ_API_KEY?.length);
+            console.log('AssemblyAI key length:', window.ENV.ASSEMBLYAI_API_KEY?.length);
+            
+            // Mock API routes in client
+            window.API_ROUTES = {
+              transcribe: async (audioBlob) => {
+                const formData = new FormData();
+                formData.append('audio', audioBlob, 'recording.webm');
+                
+                const response = await fetch('/api/transcribe', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'audio/webm;codecs=opus'
+                  },
+                  body: audioBlob
+                });
+                
+                const responseText = await response.text();
+                if (!response.ok) {
+                  throw new Error(\`Transcription failed: \${responseText}\`);
+                }
+                
+                return JSON.parse(responseText);
+              },
+              
+              chat: async (message) => {
+                const response = await fetch('/api/chat', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({ message })
+                });
+                
+                if (!response.ok) {
+                  throw new Error('AI response failed');
+                }
+                
+                return response.json();
+              }
+            };
           `,
         }}
       />
@@ -110,8 +328,11 @@ export default function Home() {
                 </main>
             </main>
 
+            <script>
+                // Products data embedded
+                window.PRODUCTS = ${JSON.stringify(products)};
+            </script>
             <script src="/config.js"></script>
-            <script src="/lib/products.js"></script>
             <script src="/app.js"></script>
         </body>
         </html>
