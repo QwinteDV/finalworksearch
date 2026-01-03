@@ -165,16 +165,9 @@ class ProductSearchApp {
 
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             
-            // Find supported MIME type
-            let mimeType = 'audio/webm;codecs=opus';
-            if (!MediaRecorder.isTypeSupported(mimeType)) {
-                mimeType = 'audio/webm';
-                if (!MediaRecorder.isTypeSupported(mimeType)) {
-                    mimeType = 'audio/mp4';
-                }
-            }
-            
-            this.mediaRecorder = new MediaRecorder(stream, { mimeType });
+// Use WAV format for better compatibility
+            this.mediaRecorder = new MediaRecorder(stream);
+            this.audioFormat = 'audio/wav';
             this.audioChunks = [];
 
             this.mediaRecorder.ondataavailable = (event) => {
@@ -188,10 +181,14 @@ class ProductSearchApp {
                     this.stopListeningUI();
                     stream.getTracks().forEach(track => track.stop());
                     
-            const audioBlob = new Blob(this.audioChunks, { type: mimeType });
+            const audioBlob = new Blob(this.audioChunks, { type: this.audioFormat });
             console.log('Created audio blob:', audioBlob.size, 'bytes, type:', audioBlob.type);
             
-            const transcript = await this.transcribeAudio(audioBlob);
+            // Convert to WAV format if needed
+            const wavBlob = await this.convertToWav(audioBlob);
+            console.log('WAV blob:', wavBlob.size, 'bytes, type:', wavBlob.type);
+            
+            const transcript = await this.transcribeAudio(wavBlob);
                     
                     if (transcript && transcript.trim()) {
                         this.searchInput.value = transcript;
@@ -328,6 +325,56 @@ class ProductSearchApp {
 
     hideSearchInfo() {
         this.searchInfo.classList.add('hidden');
+    }
+
+    async convertToWav(audioBlob) {
+        try {
+            const arrayBuffer = await audioBlob.arrayBuffer();
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+            
+            const length = audioBuffer.length;
+            const sampleRate = audioBuffer.sampleRate;
+            const numberOfChannels = audioBuffer.numberOfChannels;
+            const buffer = new ArrayBuffer(44 + length * numberOfChannels * 2);
+            const view = new DataView(buffer);
+            
+            // WAV header
+            const writeString = (offset, string) => {
+                for (let i = 0; i < string.length; i++) {
+                    view.setUint8(offset + i, string.charCodeAt(i));
+                }
+            };
+            
+            writeString(0, 'RIFF');
+            view.setUint32(4, 36 + length * numberOfChannels * 2, true);
+            writeString(8, 'WAVE');
+            writeString(12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true);
+            view.setUint16(22, numberOfChannels, true);
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, sampleRate * numberOfChannels * 2, true);
+            view.setUint16(32, numberOfChannels * 2, true);
+            view.setUint16(34, 16, true);
+            writeString(36, 'data');
+            view.setUint32(40, length * numberOfChannels * 2, true);
+            
+            // Convert float samples to 16-bit PCM
+            let offset = 44;
+            for (let i = 0; i < length; i++) {
+                for (let channel = 0; channel < numberOfChannels; channel++) {
+                    const sample = Math.max(-1, Math.min(1, audioBuffer.getChannelData(channel)[i]));
+                    view.setInt16(offset, sample * 0x7FFF, true);
+                    offset += 2;
+                }
+            }
+            
+            return new Blob([buffer], { type: 'audio/wav' });
+        } catch (error) {
+            console.error('Error converting to WAV:', error);
+            return audioBlob; // Fallback to original blob
+        }
     }
 }
 

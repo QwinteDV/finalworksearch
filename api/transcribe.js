@@ -22,16 +22,14 @@ module.exports = async function handler(req, res) {
 
         console.log('AssemblyAI API key found, processing audio...');
 
-        // Handle both raw audio and FormData
-        let audioBuffer;
-        let contentType = 'audio/webm';
-
-        // Check if it's FormData
+        // Handle FormData parsing
         const contentTypeHeader = req.headers['content-type'];
+        let audioBuffer;
+        let contentType = 'audio/wav';
+
         if (contentTypeHeader && contentTypeHeader.includes('multipart/form-data')) {
-            // Parse FormData
+            // Simple FormData parsing
             const chunks = [];
-            let boundary = '--' + contentTypeHeader.split('boundary=')[1];
             let data = Buffer.alloc(0);
             
             req.on('data', chunk => data = Buffer.concat([data, chunk]));
@@ -41,14 +39,18 @@ module.exports = async function handler(req, res) {
                 req.on('error', reject);
             });
 
-            // Extract audio from FormData
-            const parts = data.toString().split(boundary);
+            // Find audio data in FormData
+            const boundary = contentTypeHeader.split('boundary=')[1];
+            const parts = data.toString('binary').split('--' + boundary);
+            
             for (const part of parts) {
-                if (part.includes('Content-Disposition: form-data') && part.includes('audio')) {
+                if (part.includes('name="audio"')) {
                     const headerEnd = part.indexOf('\r\n\r\n');
-                    const audioData = part.substring(headerEnd + 4);
-                    audioBuffer = Buffer.from(audioData, 'binary');
-                    break;
+                    if (headerEnd !== -1) {
+                        const audioData = part.substring(headerEnd + 4);
+                        audioBuffer = Buffer.from(audioData, 'binary');
+                        break;
+                    }
                 }
             }
         } else {
@@ -62,7 +64,7 @@ module.exports = async function handler(req, res) {
             });
             
             audioBuffer = Buffer.concat(buffers);
-            contentType = req.headers['content-type'] || 'audio/webm';
+            contentType = req.headers['content-type'] || 'audio/wav';
         }
 
         if (!audioBuffer || audioBuffer.length === 0) {
@@ -73,13 +75,10 @@ module.exports = async function handler(req, res) {
         console.log('Audio received, size:', audioBuffer.length, 'bytes');
         console.log('Content type:', contentType);
 
-        // Create a proper WebM file if needed
-        let finalBuffer = audioBuffer;
-        if (!audioBuffer.toString('ascii', 0, 4).includes('EBML')) {
-            // Add WebM header if missing
-            const webmHeader = Buffer.from([0x1A, 0x45, 0xDF, 0xA3]);
-            finalBuffer = Buffer.concat([webmHeader, audioBuffer]);
-            console.log('Added WebM header to audio');
+        // Check if it's a valid WAV file
+        if (audioBuffer.length < 44 || audioBuffer.toString('ascii', 0, 4) !== 'RIFF') {
+            console.error('Invalid WAV file format');
+            return res.status(400).json({ error: 'Invalid audio format' });
         }
 
         // Upload audio to AssemblyAI
@@ -90,7 +89,7 @@ module.exports = async function handler(req, res) {
                 'Authorization': assemblyApiKey,
                 'Content-Type': contentType
             },
-            body: finalBuffer
+            body: audioBuffer
         });
 
         if (!uploadResponse.ok) {
@@ -128,10 +127,10 @@ module.exports = async function handler(req, res) {
 
         console.log('Transcription started, ID:', transcriptId);
 
-        // Poll for completion
+        // Poll for completion with shorter timeout
         let transcriptResult;
         let attempts = 0;
-        const maxAttempts = 30;
+        const maxAttempts = 20; // Reduced timeout
 
         while (attempts < maxAttempts) {
             const pollResponse = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
@@ -161,7 +160,7 @@ module.exports = async function handler(req, res) {
         }
 
         if (!transcriptResult || transcriptResult.status !== 'completed') {
-            console.error('Transcription timeout');
+            console.error('Transcription timeout after', attempts, 'attempts');
             return res.status(500).json({ error: 'Transcription timeout' });
         }
 
