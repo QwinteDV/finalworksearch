@@ -1,8 +1,4 @@
 export async function POST(request) {
-  if (request.method !== 'POST') {
-    return Response.json({ error: 'Method not allowed' }, { status: 405 });
-  }
-
   try {
     const assemblyApiKey = process.env.ASSEMBLYAI_API_KEY;
     
@@ -10,31 +6,27 @@ export async function POST(request) {
       return Response.json({ error: 'AssemblyAI API key not configured' }, { status: 500 });
     }
 
-    // Parse form data to get the audio file
-    const formData = await request.formData();
-    const audioFile = formData.get('audio');
-    
-    if (!audioFile) {
+    // Get the audio blob directly from request
+    const audioArrayBuffer = await request.arrayBuffer();
+    const audioBuffer = Buffer.from(audioArrayBuffer);
+
+    if (!audioBuffer || audioBuffer.length === 0) {
       return Response.json({ error: 'No audio data provided' }, { status: 400 });
     }
 
-    // Convert file to buffer
-    const audioBuffer = await audioFile.arrayBuffer();
-    const buffer = Buffer.from(audioBuffer);
-    const contentType = audioFile.type || 'audio/webm';
-
-    // Upload audio to AssemblyAI with correct content type
+    // Upload audio to AssemblyAI
     const uploadResponse = await fetch('https://api.assemblyai.com/v2/upload', {
       method: 'POST',
       headers: {
         'Authorization': assemblyApiKey,
-        'Content-Type': contentType || 'audio/webm'
+        'Content-Type': 'audio/webm'
       },
-      body: buffer
+      body: audioBuffer
     });
 
     if (!uploadResponse.ok) {
-      throw new Error(`Upload failed: ${uploadResponse.status}`);
+      console.error('Upload failed:', uploadResponse.status, await uploadResponse.text());
+      return Response.json({ error: `Upload failed: ${uploadResponse.status}` }, { status: uploadResponse.status });
     }
 
     const uploadData = await uploadResponse.json();
@@ -54,7 +46,8 @@ export async function POST(request) {
     });
 
     if (!transcriptResponse.ok) {
-      throw new Error(`Transcription failed: ${transcriptResponse.status}`);
+      console.error('Transcription failed:', transcriptResponse.status, await transcriptResponse.text());
+      return Response.json({ error: `Transcription failed: ${transcriptResponse.status}` }, { status: transcriptResponse.status });
     }
 
     const transcriptData = await transcriptResponse.json();
@@ -73,7 +66,8 @@ export async function POST(request) {
       });
 
       if (!pollResponse.ok) {
-        throw new Error(`Poll failed: ${pollResponse.status}`);
+        console.error('Poll failed:', pollResponse.status, await pollResponse.text());
+        return Response.json({ error: `Poll failed: ${pollResponse.status}` }, { status: pollResponse.status });
       }
 
       transcriptResult = await pollResponse.json();
@@ -81,7 +75,8 @@ export async function POST(request) {
       if (transcriptResult.status === 'completed') {
         break;
       } else if (transcriptResult.status === 'error') {
-        throw new Error(`Transcription error: ${transcriptResult.error}`);
+        console.error('Transcription error:', transcriptResult.error);
+        return Response.json({ error: `Transcription error: ${transcriptResult.error}` }, { status: 500 });
       }
 
       await new Promise(resolve => setTimeout(resolve, 1000));
@@ -89,7 +84,7 @@ export async function POST(request) {
     }
 
     if (transcriptResult.status !== 'completed') {
-      throw new Error('Transcription timeout');
+      return Response.json({ error: 'Transcription timeout' }, { status: 500 });
     }
 
     return Response.json({ 

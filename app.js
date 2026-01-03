@@ -65,7 +65,7 @@ class ProductSearchApp {
             this.startListeningUI();
 
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            this.mediaRecorder = new MediaRecorder(stream);
+            this.mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
             this.audioChunks = [];
 
             this.mediaRecorder.ondataavailable = (event) => {
@@ -79,7 +79,7 @@ class ProductSearchApp {
                     this.stopListeningUI();
                     stream.getTracks().forEach(track => track.stop());
                     
-                    const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
+                    const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm;codecs=opus' });
                     const transcript = await this.transcribeAudio(audioBlob);
                     
                     if (transcript) {
@@ -114,35 +114,26 @@ class ProductSearchApp {
     async transcribeAudio(audioBlob) {
         try {
             console.log('Sending audio to server proxy...');
-            
-            // Create proper FormData for Next.js API route
-            const formData = new FormData();
-            formData.append('audio', audioBlob, 'recording.webm');
 
             const response = await fetch('/api/transcribe', {
                 method: 'POST',
-                body: formData
+                headers: {
+                    'Content-Type': 'audio/webm;codecs=opus'
+                },
+                body: audioBlob
             });
 
+            const responseText = await response.text();
+            
             if (!response.ok) {
-                const errorText = await response.text();
-                console.error('Server transcription error:', response.status, errorText);
-                
-                // Try to parse as JSON if possible
-                let errorData;
-                try {
-                    errorData = JSON.parse(errorText);
-                } catch {
-                    errorData = { error: errorText };
-                }
-                
-                throw new Error(`Server transcription failed: ${response.status} - ${errorData.error || errorText}`);
+                console.error('API Response:', response.status, responseText);
+                throw new Error(`Transcription failed: ${responseText}`);
             }
 
-            const result = await response.json();
-            console.log('Transcription result:', result);
+            const data = JSON.parse(responseText);
+            console.log('Transcription result:', data);
             
-            return result.text || '';
+            return data.text || '';
         } catch (error) {
             console.error('Error transcribing audio:', error);
             alert('Voice transcription failed. Please try again.');
@@ -152,7 +143,7 @@ class ProductSearchApp {
 
     async enhanceSearchQuery(query) {
         try {
-            const response = await fetch('/api/enhance', {
+            const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -161,8 +152,7 @@ class ProductSearchApp {
             });
 
             if (!response.ok) {
-                const errorData = await response.json();
-                console.error('Enhancement server error:', response.status, errorData);
+                console.error('Enhancement server error:', response.status);
                 return query;
             }
 
