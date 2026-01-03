@@ -6,6 +6,23 @@ export default function Home() {
       <script
         dangerouslySetInnerHTML={{
           __html: `
+            // Test API routes
+            fetch('/api/test')
+              .then(res => res.json())
+              .then(data => console.log('API Test:', data))
+              .catch(err => console.error('API Test failed:', err));
+            
+            // Test specific routes
+            fetch('/api/transcribe', { method: 'POST', body: 'test' })
+              .then(res => res.json())
+              .then(data => console.log('Transcribe API:', data))
+              .catch(err => console.error('Transcribe API failed:', err));
+            
+            fetch('/api/chat', { method: 'POST', body: JSON.stringify({message: 'test'}) })
+              .then(res => res.json())
+              .then(data => console.log('Chat API:', data))
+              .catch(err => console.error('Chat API failed:', err));
+            
             window.ENV = {
               GROQ_API_KEY: "${process.env.GROQ_API_KEY}",
               ASSEMBLYAI_API_KEY: "${process.env.ASSEMBLYAI_API_KEY}"
